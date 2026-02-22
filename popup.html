@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    body { width: 220px; font-family: sans-serif; padding: 15px; background: #f9f9f9; }
+    h3 { margin-top: 0; color: #333; font-size: 16px; }
+    button {
+      width: 100%; padding: 10px; margin: 5px 0; cursor: pointer;
+      background: #2196F3; color: white; border: none; border-radius: 4px;
+      font-weight: bold; transition: background 0.2s;
+    }
+    button:hover { background: #1976D2; }
+    button:disabled { background: #ccc; cursor: not-allowed; }
+    .status { font-size: 11px; color: #666; text-align: center; margin-top: 8px; }
+  </style>
+</head>
+<body>
+  <h3>Recipe Porter</h3>
+  <button id="extractBtn">1. Extract from Cookidoo</button>
+  <button id="fillBtn">2. Fill Monsieur Cuisine</button>
+  <div class="status" id="statusText">Open a recipe to start.</div>
+  <script src="popup.js"></script>
+</body>
+</html>
