@@ -27,8 +27,13 @@ document.getElementById('fillBtn').addEventListener('click', async () => {
 
   chrome.storage.local.get("recipeData", (result) => {
     if (result.recipeData) {
+      updateStatus("Filling recipe... Please wait.");
       chrome.tabs.sendMessage(tab.id, { action: "FILL", data: result.recipeData }, (res) => {
-        updateStatus("Page 1 filled!");
+        if (res && res.success) {
+          updateStatus("Recipe filled successfully!");
+        } else {
+          updateStatus("Filling might have been interrupted.");
+        }
       });
     } else {
       updateStatus("No recipe data found. Extract first.");
