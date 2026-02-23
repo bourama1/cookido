@@ -93,6 +93,7 @@ async function waitForElement(selector, isXPath = false, timeout = 5000) {
 // Hyper-deliberate typing to force framework state updates
 async function typeValue(element, value) {
   if (!element) return;
+  console.log(`Typing into ${element.tagName}: ${value}`);
   element.focus();
   element.click();
   await delay(100);
@@ -100,21 +101,33 @@ async function typeValue(element, value) {
   // Clear field via selection to trigger Vue's observers
   element.select();
   document.execCommand('delete', false, null);
+  element.value = ''; // Force clear
   element.dispatchEvent(new Event('input', { bubbles: true }));
+  element.dispatchEvent(new Event('change', { bubbles: true }));
   await delay(50);
 
   // Inject value
   document.execCommand('insertText', false, String(value || ""));
+
+  // If insertText failed to set value (can happen in some environments)
+  if (element.value !== String(value || "")) {
+      element.value = String(value || "");
+  }
+
+  // Dispatch events that frameworks love
   element.dispatchEvent(new Event('input', { bubbles: true }));
   element.dispatchEvent(new Event('change', { bubbles: true }));
+
+  // Key events for validation
+  const keydown = new KeyboardEvent('keydown', { key: 'a', bubbles: true });
+  const keyup = new KeyboardEvent('keyup', { key: 'a', bubbles: true });
+  element.dispatchEvent(keydown);
+  element.dispatchEvent(keyup);
+  element.dispatchEvent(new Event('input', { bubbles: true }));
+
   await delay(100);
-
-  // Commit value
-  element.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
-  await delay(150);
-
   element.blur();
-  await delay(150);
+  await delay(100);
 }
 
 async function clickNext() {
@@ -352,20 +365,70 @@ async function fillRecipe(recipe) {
   await waitForElement("//h4[contains(., 'Kroky')]", true);
 
   for (const step of recipe.steps) {
+    if (!step.text || step.text.trim() === "") {
+        console.warn("⚠️ Skipping empty step:", step);
+      continue;
+    }
+    console.log(`Adding step: ${step.title}`);
     const addStepBtn = document.evaluate("//button[contains(., 'Přidat krok')]", document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
     if (addStepBtn) {
       addStepBtn.click();
-      await delay(1500);
+      await delay(2000);
+
       const titleInp = await waitForElement("input[placeholder='např. připravit cibuli.']");
       const descInp = await waitForElement("textarea[placeholder='např. oloupat cibuli a nakrájet ji na tenká kolečka']");
+
       if (titleInp) await typeValue(titleInp, step.title);
       if (descInp) await typeValue(descInp, step.text);
-      await delay(500);
-      const saveBtn = document.evaluate("//button[contains(., 'Přidat') or contains(., 'Uložit')]", document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
-      if (saveBtn) {
-        saveBtn.click();
-        await delay(1500);
+
+      await delay(1000);
+
+      // Find the "Přidat" (Add) button in the dialog
+      // Use normalize-space to match exact text and avoid catching "Přidat krok"
+      let saveBtn = document.evaluate("//button[normalize-space(.)='Přidat' or normalize-space(.)='Uložit']", document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+
+      // Fallback: search by class if XPath fails or find all buttons and filter
+      if (!saveBtn) {
+          const buttons = Array.from(document.querySelectorAll('button.v-btn'));
+          saveBtn = buttons.find(b => b.innerText.includes('Přidat') && !b.innerText.includes('krok')) ||
+                    buttons.find(b => b.innerText.includes('Uložit'));
       }
+
+      if (saveBtn) {
+        console.log("Found save button:", saveBtn.outerHTML);
+        const isDisabled = saveBtn.disabled || saveBtn.classList.contains('v-btn--disabled') || saveBtn.getAttribute('disabled') === 'disabled';
+
+        if (isDisabled) {
+            console.log("⚠️ Save button is disabled, force enabling...");
+            saveBtn.disabled = false;
+            saveBtn.removeAttribute('disabled');
+            saveBtn.classList.remove('v-btn--disabled');
+            saveBtn.style.pointerEvents = 'auto';
+            saveBtn.style.opacity = '1';
+        }
+
+        await delay(500);
+        saveBtn.focus();
+        saveBtn.click();
+
+        // Dispatch click event manually as fallback
+        saveBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, view: window }));
+
+        console.log("Clicked save button.");
+
+        // Wait for dialog to close
+        await delay(2000);
+
+        // Verification check
+        const stillVisible = document.evaluate("//button[normalize-space(.)='Přidat' or normalize-space(.)='Uložit']", document, null, XPathResult.FIRST_ORDERED_NODE_TYPE, null).singleNodeValue;
+        if (stillVisible && stillVisible.offsetParent !== null) {
+            console.warn("⚠️ Save button still visible after click, form might be invalid or click didn't work.");
+        }
+      } else {
+        console.error("❌ Could not find 'Přidat' or 'Uložit' button!");
+      }
+    } else {
+      console.error("❌ Could not find 'Přidat krok' button!");
     }
   }
   console.log("🏁 Dokončeno.");
